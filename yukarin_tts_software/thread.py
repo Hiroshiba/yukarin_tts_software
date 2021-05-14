@@ -1,32 +1,45 @@
+import traceback
+
 import pyopenjtalk
 import soundfile
-from PySide2.QtCore import QThread, QUrl, Signal
-from PySide2.QtMultimedia import QMediaPlayer
-
-from yukarin_tts_software.audio_model import AudioItem
+from PySide2.QtCore import QObject, QThread, Signal, Slot
 
 
-class AudioSynthesisAndPlayThread(QThread):
-
+class AudioSynthesisWorker(QObject):
     reportPath = Signal(str)
 
-    def __init__(self, audio_item: AudioItem, player: QMediaPlayer):
-        super().__init__(parent=None)
+    @Slot()
+    def load(self):
+        pass
 
-        self.audio_item = audio_item
-        self.player = player
-
-    def run(self):
-        path = self.audio_item.generate_unique_audio_path()
-        if not path.exists():
-            wave, sr = pyopenjtalk.tts(self.audio_item.text)
+    @Slot()
+    def synthesis(self, text: str, outputPath: str):
+        try:
+            wave, sr = pyopenjtalk.tts(text)
             wave /= 2 ** 16
-            soundfile.write(path, wave, sr)
+            soundfile.write(outputPath, wave, sr)
 
-        # self.reportPath.emit(str(path))
+            self.reportPath.emit(outputPath)
+        except:
+            traceback.print_exc()
 
-        self.player.setMedia(QUrl.fromLocalFile(str(path)))
-        self.player.play()
+            self.reportPath.emit("")
 
-        self.player.
-        playerを待つためにイベントループ作る？
+
+class AudioSynthesisController(QObject):
+    def __init__(self):
+        super().__init__(parent=None)
+        self.thread = QThread(parent=self)
+        self.worker = AudioSynthesisWorker()
+
+        self.thread.started.connect(self.worker.load)
+
+        self.thread.start()
+
+    @property
+    def synthesis(self):
+        return self.worker.synthesis
+
+    @property
+    def reportPath(self):
+        return self.worker.reportPath

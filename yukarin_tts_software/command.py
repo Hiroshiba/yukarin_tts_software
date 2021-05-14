@@ -2,6 +2,7 @@ from PySide2.QtCore import QThread, Slot
 from PySide2.QtWidgets import QUndoCommand
 
 from yukarin_tts_software.audio_model import AudioItem, AudioModel
+from yukarin_tts_software.thread import AudioSynthesisController
 
 
 class AppendAudioItemCommand(QUndoCommand):
@@ -59,6 +60,37 @@ class ModifyAudioItemCommand(QUndoCommand):
         self.audio_model.modify_item(
             index=self.index, key=self.key, value=self.before_value
         )
+
+
+class AudioSynthesisCommand(QUndoCommand):
+    def __init__(
+        self, controller: AudioSynthesisController, audio_model: AudioModel, index: int
+    ):
+        super().__init__(parent=None)
+
+        self.controller = controller
+        self.index = index
+
+        self.setText(str(self))
+
+        self.audio_item = audio_model.fetch_item(index)
+
+    def __repr__(self):
+        return f"<AudioSynthesisCommand index={self.index}>"
+
+    @property
+    def reportPath(self):
+        return self.controller.reportPath
+
+    def redo(self):
+        text = self.audio_item.text
+        path = self.audio_item.generate_unique_audio_path()
+        if not path.exists():
+            self.controller.synthesis(text, str(path))
+        else:
+            self.reportPath.emit(str(path))
+
+        self.setObsolete(True)
 
 
 class ThreadCommand(QUndoCommand):

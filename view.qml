@@ -12,7 +12,9 @@ Window {
 
     required property var audioModel
 
-    signal play(int index)
+    signal convertAndPlay(int index)
+    // signal play(int index)
+    signal stop(int index)
 
     signal undo()
     signal redo()
@@ -61,7 +63,12 @@ Window {
                     text: playing ? "■" : "▶"
 
                     onClicked: {
-                        play(index)
+                        if (playing) {
+                            stop(index)
+                        }
+                        else {
+                            convertAndPlay(index)
+                        }
                     }
                 }
 
