@@ -1,4 +1,5 @@
 import traceback
+from pathlib import Path
 
 import pyopenjtalk
 import soundfile
@@ -15,6 +16,10 @@ class AudioSynthesisWorker(QObject):
     @Slot()
     def synthesis(self, text: str, outputPath: str):
         try:
+            if Path(outputPath).exists():
+                self.reportPath.emit(outputPath)
+                return
+
             wave, sr = pyopenjtalk.tts(text)
             wave /= 2 ** 16
             soundfile.write(outputPath, wave, sr)

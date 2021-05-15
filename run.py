@@ -3,10 +3,11 @@ import platform
 import sys
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from typing import Optional
 
 import pyopenjtalk
 import soundfile
-from PySide2.QtCore import QSettings, QThread, QUrl
+from PySide2.QtCore import QSettings, QThread, QUrl, Slot
 from PySide2.QtGui import QGuiApplication, QIcon
 from PySide2.QtMultimedia import QMediaPlayer
 from PySide2.QtQml import QQmlApplicationEngine, QQmlContext
@@ -14,12 +15,7 @@ from PySide2.QtQuickControls2 import QQuickStyle
 from PySide2.QtWidgets import QApplication, QUndoCommand, QUndoStack, QUndoView
 
 from yukarin_tts_software.audio_model import AudioItem, AudioModel
-from yukarin_tts_software.command import (
-    AppendAudioItemCommand,
-    AudioSynthesisCommand,
-    ModifyAudioItemCommand,
-    ThreadCommand,
-)
+from yukarin_tts_software.command import AppendAudioItemCommand, ModifyAudioItemCommand
 from yukarin_tts_software.thread import AudioSynthesisController
 
 if __name__ == "__main__":
@@ -47,40 +43,29 @@ if __name__ == "__main__":
     player = QMediaPlayer()
 
     def convertAndPlay(index: int):
-        command = AudioSynthesisCommand(
-            controller=audio_synthesis_controller, audio_model=audio_model, index=index
-        )
+        audio_item = audio_model.fetch_item(index)
 
         def reportPath(path: str):
-            command.reportPath.disconnect(reportPath)
+            audio_synthesis_controller.reportPath.disconnect(reportPath)
             player.setMedia(QUrl.fromLocalFile(path))
             play(index)
 
-        command.reportPath.connect(reportPath)
+        audio_synthesis_controller.reportPath.connect(reportPath)
 
-        undo_stack.push(command)
+        text = audio_item.text
+        path = audio_item.generate_unique_audio_path()
+        audio_synthesis_controller.synthesis(text, str(path))
 
     def play(index: int):
-        thread = QThread()
-
-        def started():
-            audio_model.modify_item(index, "playing", True)
-            player.stateChanged.connect(stateChanged)
-            player.play()
-
         def stateChanged(state: QMediaPlayer.State):
-            if state == QMediaPlayer.State.StoppedState:
-                thread.quit()
-                thread.wait()
+            if state == QMediaPlayer.State.PlayingState:
+                audio_model.modify_item(index, "playing", True)
+            elif state == QMediaPlayer.State.StoppedState:
+                player.stateChanged.disconnect(stateChanged)
+                audio_model.modify_item(index, "playing", False)
 
-        def finished():
-            audio_model.modify_item(index, "playing", False)
-            player.stateChanged.disconnect(stateChanged)
-
-        thread.started.connect(started)
-        thread.finished.connect(finished)
-
-        undo_stack.push(ThreadCommand(thread))
+        player.stateChanged.connect(stateChanged)
+        player.play()
 
     def stop(index: int):
         player.stop()
